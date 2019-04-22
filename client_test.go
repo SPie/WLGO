@@ -1,49 +1,54 @@
 package wlgo
 
 import (
-    "fmt"
-    "testing"
+    "bytes"
+    "errors"
+    "io/ioutil"
     "net/http"
-    "net/http/httptest"
+    "testing"
+
+    wlgohttp "wlgo/http"
 
     "github.com/stretchr/testify/assert"
 )
 
-func mockServerForRequestUrlTest() (*httptest.Server) {
-    return mockServer(
-        func(responseWriter http.ResponseWriter, request *http.Request) {
-            fmt.Fprint(responseWriter, request.URL.String())
-        },
-    )
+type TestHttpClient struct {
+    Error error
 }
 
-func mockServer(handlerFunction func (responseWriter http.ResponseWriter, request *http.Request)) (*httptest.Server) {
-    return httptest.NewServer(http.HandlerFunc(handlerFunction))
+func (testHttpClient TestHttpClient) Get(url string) (*http.Response, error) {
+    if testHttpClient.Error != nil {
+        return nil, testHttpClient.Error
+    }
+
+    response := http.Response{
+        Body: ioutil.NopCloser(bytes.NewBuffer([]byte(url))),
+    }
+    return &response, testHttpClient.Error
 }
 
 func TestCreateNewWLClient(t *testing.T) {
-    wlClient, err := NewClient("https://endpoint.api", "SenderId1234")
+    wlClient, err := NewClient("https://endpoint.api", "SenderId1234", wlgohttp.NewClient())
     assert.Empty(t, err)
     assert.Equal(t, "https://endpoint.api", wlClient.GetApiEndpoint())
     assert.Equal(t, "SenderId1234", wlClient.GetSenderId())
+    _, ok := wlClient.GetHttpClient().(wlgohttp.Client)
+    assert.True(t, ok)
 }
 
 func TestCreateNewWLClientWithEmptyApiEndpoint(t *testing.T) {
-    _, err := NewClient("", "SenderId1234")
+    _, err := NewClient("", "SenderId1234", wlgohttp.NewClient())
     assert.EqualError(t, err, "Empty API endpoint")
 }
 
 func TestCreateNewWLClientWithEmptySenderId(t *testing.T) {
-    _, err := NewClient("https://endpoint.api", "")
+    _, err := NewClient("https://endpoint.api", "", wlgohttp.NewClient())
     assert.EqualError(t, err, "Empty sender id")
 }
 
 func TestSuccessfulRequestRequestWithParameters(t *testing.T) {
-    server := mockServerForRequestUrlTest()
-    defer server.Close()
-
-    wlClient, _ := NewClient(server.URL, "SenderId1234")
-    responseString := "/action?sender=SenderId1234&key=value"
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{})
+    responseString := "https://test.x/action?sender=SenderId1234&key=value"
 
     response, err := wlClient.Request("action", map[string]string{"key": "value"})
     assert.Empty(t, err)
@@ -51,11 +56,8 @@ func TestSuccessfulRequestRequestWithParameters(t *testing.T) {
 }
 
 func TestSuccessfulRequestWithoutParameters(t *testing.T) {
-    server := mockServerForRequestUrlTest()
-    defer server.Close()
-
-    wlClient, _ := NewClient(server.URL, "SenderId4321")
-    responseString := "/action?sender=SenderId4321"
+    wlClient, _ := NewClient("https://test.x", "SenderId4321", TestHttpClient{})
+    responseString := "https://test.x/action?sender=SenderId4321"
 
     response, err := wlClient.Request("action", nil)
     assert.Empty(t, err)
@@ -63,11 +65,15 @@ func TestSuccessfulRequestWithoutParameters(t *testing.T) {
 }
 
 func TestRequestErrorWithEmptyAction(t *testing.T) {
-    server := mockServerForRequestUrlTest()
-    defer server.Close()
-
-    wlClient, _ := NewClient(server.URL, "SenderId1234")
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{})
 
     _, err := wlClient.Request("", nil)
     assert.EqualError(t, err,  "Empty action")
+}
+
+func TestRequestWithError(t *testing.T) {
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{Error: errors.New("Error")})
+
+    _, err := wlClient.Request("action", nil)
+    assert.EqualError(t, err, "Error")
 }
