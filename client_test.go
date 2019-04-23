@@ -12,27 +12,37 @@ import (
     "github.com/stretchr/testify/assert"
 )
 
-type TestHttpClient struct {
+type MockHttpClient struct {
+    Response []byte
     Error error
+    ExpectedUrl string
 }
 
-func (testHttpClient TestHttpClient) Get(url string) (*http.Response, error) {
-    if testHttpClient.Error != nil {
-        return nil, testHttpClient.Error
+func (mockHttpClient MockHttpClient) Get(url string) (*http.Response, error) {
+    if mockHttpClient.Error != nil {
+        return nil, mockHttpClient.Error
     }
 
-    response := http.Response{
-        Body: ioutil.NopCloser(bytes.NewBuffer([]byte(url))),
+    if mockHttpClient.ExpectedUrl != "" && mockHttpClient.ExpectedUrl != url {
+        return nil, errors.New("Invalid parameters")
     }
-    return &response, testHttpClient.Error
+
+    response := http.Response{}
+    if mockHttpClient.Response == nil {
+        response.Body = ioutil.NopCloser(bytes.NewBuffer([]byte(url)))
+        return &response, nil
+    }
+
+    response.Body = ioutil.NopCloser(bytes.NewBuffer(mockHttpClient.Response))
+    return &response, mockHttpClient.Error
 }
 
 func TestCreateNewWLClient(t *testing.T) {
     wlClient, err := NewClient("https://endpoint.api", "SenderId1234", wlgohttp.NewClient())
     assert.Empty(t, err)
-    assert.Equal(t, "https://endpoint.api", wlClient.GetApiEndpoint())
-    assert.Equal(t, "SenderId1234", wlClient.GetSenderId())
-    _, ok := wlClient.GetHttpClient().(wlgohttp.Client)
+    assert.Equal(t, "https://endpoint.api", wlClient.apiEndpoint)
+    assert.Equal(t, "SenderId1234", wlClient.senderId)
+    _, ok := wlClient.httpClient.(wlgohttp.Client)
     assert.True(t, ok)
 }
 
@@ -46,34 +56,107 @@ func TestCreateNewWLClientWithEmptySenderId(t *testing.T) {
     assert.EqualError(t, err, "Empty sender id")
 }
 
-func TestSuccessfulRequestRequestWithParameters(t *testing.T) {
-    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{})
+func TestSuccessfulRequestWithParameters(t *testing.T) {
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{})
     responseString := "https://test.x/action?sender=SenderId1234&key=value"
 
     response, err := wlClient.Request("action", map[string]string{"key": "value"})
+    defer response.Close()
+
     assert.Empty(t, err)
-    assert.Equal(t, []byte(responseString), response)
+    body, _ := ioutil.ReadAll(response)
+    assert.Equal(t, []byte(responseString), body)
 }
 
 func TestSuccessfulRequestWithoutParameters(t *testing.T) {
-    wlClient, _ := NewClient("https://test.x", "SenderId4321", TestHttpClient{})
+    wlClient, _ := NewClient("https://test.x", "SenderId4321", MockHttpClient{})
     responseString := "https://test.x/action?sender=SenderId4321"
 
     response, err := wlClient.Request("action", nil)
+    defer response.Close()
+
     assert.Empty(t, err)
-    assert.Equal(t, []byte(responseString), response)
+    body, _ := ioutil.ReadAll(response)
+    assert.Equal(t, []byte(responseString), body)
 }
 
 func TestRequestErrorWithEmptyAction(t *testing.T) {
-    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{})
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{})
 
     _, err := wlClient.Request("", nil)
     assert.EqualError(t, err,  "Empty action")
 }
 
 func TestRequestWithError(t *testing.T) {
-    wlClient, _ := NewClient("https://test.x", "SenderId1234", TestHttpClient{Error: errors.New("Error")})
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{Error: errors.New("Error")})
 
     _, err := wlClient.Request("action", nil)
     assert.EqualError(t, err, "Error")
 }
+
+func TestGetMonitorsWithoutStationNumbers(t *testing.T) {
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{})
+
+    _, err := wlClient.GetMonitors([]string{}, []string{})
+    assert.EqualError(t, err, "Empty station numbers")
+}
+
+func TestGetMonitorsWithInvalidFaultTypes(t *testing.T) {
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{})
+
+    _, err := wlClient.GetMonitors([]string{"123"}, []string{"InvalidFault"})
+    assert.EqualError(t, err, "Invalid fault types")
+}
+
+func TestSuccessfullyGetMonitorsWithOneStationNumberAndNoFaultTypes(t *testing.T) {
+    response := `{
+        "data":{
+            "trafficInfo":{
+                "name":"Name"
+            }
+        },
+        "message":{
+            "value":"Value" 
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{Response: []byte(response), ExpectedUrl: "https://test.x/monitor?sender=SenderId1234&rbl=123"},
+    )
+
+    monitorResponse, err := wlClient.GetMonitors([]string{"123"}, []string{})
+
+    assert.Empty(t, err)
+    assert.Equal(t, "Name", monitorResponse.MonitorResponseData.TrafficInfo.Name)
+    assert.Equal(t, "Value", monitorResponse.ResponseMessage.Value)
+}
+
+func TestGetMonitorsWithError(t *testing.T) {
+    wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{Error: errors.New("Error")})
+
+    _, err := wlClient.GetMonitors([]string{"123"}, []string{})
+    assert.EqualError(t, err, "Error")
+}
+
+// func TestGetMonitorsWithFaultType(t *testing.T) {
+//     response := `{
+//         "data":{
+//             "trafficInfo":{
+//                 "name":"Name"
+//             }
+//         },
+//         "message":{
+//             "value":"Value" 
+//         }
+//     }`
+//     wlClient, _ := NewClient(
+//         "https://test.x",
+//         "SenderId1234",
+//         MockHttpClient{Response: []byte(response), ExpectedUrl: "https://test.x/monitor?sender=SenderId1234&rbl=123&activateTrafficInfo=stoerungkurz"},
+//     )
+
+//     _, err := wlClient.GetMonitors([]string{"123"}, []string{"stoerungkurz"})
+
+//     assert.Empty(t, err)
+// }

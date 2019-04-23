@@ -1,26 +1,36 @@
 package wlgo
 
 import (
+    "encoding/json"
     "errors"
-    "io/ioutil"
+    "io"
 
-    wlgohttp "wlgo/http"
+    wlgoHttp "wlgo/http"
+    wlgoResponse "wlgo/response"
+)
+
+const (
+    ACTION_MONITOR string = "monitor"
+
+    FAULT_TYPE_FAULT_SHORT string = "stoerungkurz"
+    FAULT_TYPE_FAULT_LONG string = "stoerunglang"
+    FAULT_TYPE_ELEVATOR_INFO string = "aufzugsinfo"
 )
 
 type Client interface {
     GetApiEndpoint() (string)
     GetSenderId() (string)
-    GetHttpClient() (wlgohttp.Client)
+    GetHttpClient() (wlgoHttp.Client)
     Request(action string, parameters map[string]string) ([]byte, error)
 }
 
 type WLClient struct {
     apiEndpoint string
     senderId string
-    httpClient wlgohttp.Client
+    httpClient wlgoHttp.Client
 }
 
-func NewClient(apiEndpoint string, senderId string, httpClient wlgohttp.Client) (WLClient, error) {
+func NewClient(apiEndpoint string, senderId string, httpClient wlgoHttp.Client) (WLClient, error) {
     if len(apiEndpoint) < 1 {
         return WLClient{}, errors.New("Empty API endpoint")
     }
@@ -31,34 +41,49 @@ func NewClient(apiEndpoint string, senderId string, httpClient wlgohttp.Client) 
     return WLClient{apiEndpoint: apiEndpoint, senderId: senderId, httpClient: httpClient}, nil
 }
 
-func (wlClient WLClient) GetApiEndpoint() (string) {
-    return wlClient.apiEndpoint
+func (wlClient WLClient) GetMonitors(stationNumbers []string, faultTypes []string) (wlgoResponse.MonitorResponse, error) {
+    if len(stationNumbers) < 1 {
+        return wlgoResponse.MonitorResponse{}, errors.New("Empty station numbers")
+    }
+    if len(faultTypes) > 0 && !areFaultTypesValid(faultTypes) {
+        return wlgoResponse.MonitorResponse{}, errors.New("Invalid fault types")
+    }
+
+    response, err := wlClient.Request(ACTION_MONITOR, map[string]string{"rbl":stationNumbers[0]})
+    if err != nil {
+        return wlgoResponse.MonitorResponse{}, err
+    }
+
+    var monitorResponse wlgoResponse.MonitorResponse
+    json.NewDecoder(response).Decode(&monitorResponse)
+
+    return monitorResponse, nil
 }
 
-func (wlClient WLClient) GetSenderId() (string) {
-    return wlClient.senderId
+func areFaultTypesValid(faultTypes []string) (bool) {
+    for _, faultType := range faultTypes {
+        if !(faultType == FAULT_TYPE_FAULT_SHORT || faultType == FAULT_TYPE_FAULT_LONG || faultType == FAULT_TYPE_ELEVATOR_INFO) {
+            return false
+        }
+    }
+    return true
 }
 
-func (wlClient WLClient) GetHttpClient() (wlgohttp.Client) {
-    return wlClient.httpClient
-}
-
-func (wlClient WLClient) Request(action string, parameters map[string]string) ([]byte, error) {
+func (wlClient WLClient) Request(action string, parameters map[string]string) (io.ReadCloser, error) {
     if len(action) < 1 {
         return nil, errors.New("Empty action")
     }
 
-    response, err := wlClient.GetHttpClient().Get(wlClient.buildURL(action, parameters))
+    response, err := wlClient.httpClient.Get(wlClient.buildURL(action, parameters))
     if err != nil {
         return nil, err
     }
 
-    defer response.Body.Close()
-    return ioutil.ReadAll(response.Body)
+    return response.Body, nil
 }
 
 func (wlClient WLClient) buildURL(action string, parameters map[string]string) (string) {
-    url := wlClient.GetApiEndpoint() + "/" + action + "?sender=" + wlClient.GetSenderId()
+    url := wlClient.apiEndpoint + "/" + action + "?sender=" + wlClient.senderId
     for key, value := range parameters {
         url += "&" + key + "=" + value
     }
