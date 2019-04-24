@@ -18,10 +18,7 @@ const (
 )
 
 type Client interface {
-    GetApiEndpoint() (string)
-    GetSenderId() (string)
-    GetHttpClient() (wlgoHttp.Client)
-    Request(action string, parameters map[string]string) ([]byte, error)
+    Request(action string, parameters map[string]string) (io.ReadCloser, error)
 }
 
 type WLClient struct {
@@ -42,14 +39,14 @@ func NewClient(apiEndpoint string, senderId string, httpClient wlgoHttp.Client) 
 }
 
 func (wlClient WLClient) GetMonitors(stationNumbers []string, faultTypes []string) (wlgoResponse.MonitorResponse, error) {
-    if len(stationNumbers) < 1 {
+    if isEmpty(stationNumbers) {
         return wlgoResponse.MonitorResponse{}, errors.New("Empty station numbers")
     }
-    if len(faultTypes) > 0 && !areFaultTypesValid(faultTypes) {
+    if !isEmpty(faultTypes) && !areFaultTypesValid(faultTypes) {
         return wlgoResponse.MonitorResponse{}, errors.New("Invalid fault types")
     }
 
-    response, err := wlClient.Request(ACTION_MONITOR, map[string]string{"rbl":stationNumbers[0]})
+    response, err := wlClient.Request(ACTION_MONITOR, map[string][]string{"rbl": stationNumbers, "activateTrafficInfo": faultTypes})
     if err != nil {
         return wlgoResponse.MonitorResponse{}, err
     }
@@ -58,6 +55,10 @@ func (wlClient WLClient) GetMonitors(stationNumbers []string, faultTypes []strin
     json.NewDecoder(response).Decode(&monitorResponse)
 
     return monitorResponse, nil
+}
+
+func isEmpty(values []string) (bool) {
+    return len(values) < 1
 }
 
 func areFaultTypesValid(faultTypes []string) (bool) {
@@ -69,7 +70,7 @@ func areFaultTypesValid(faultTypes []string) (bool) {
     return true
 }
 
-func (wlClient WLClient) Request(action string, parameters map[string]string) (io.ReadCloser, error) {
+func (wlClient WLClient) Request(action string, parameters map[string][]string) (io.ReadCloser, error) {
     if len(action) < 1 {
         return nil, errors.New("Empty action")
     }
@@ -82,10 +83,12 @@ func (wlClient WLClient) Request(action string, parameters map[string]string) (i
     return response.Body, nil
 }
 
-func (wlClient WLClient) buildURL(action string, parameters map[string]string) (string) {
+func (wlClient WLClient) buildURL(action string, parameters map[string][]string) (string) {
     url := wlClient.apiEndpoint + "/" + action + "?sender=" + wlClient.senderId
-    for key, value := range parameters {
-        url += "&" + key + "=" + value
+    for key, values := range parameters {
+        for _, value := range values {
+            url += "&" + key + "=" + value
+        }
     }
 
     return url

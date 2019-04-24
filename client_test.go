@@ -60,7 +60,7 @@ func TestSuccessfulRequestWithParameters(t *testing.T) {
     wlClient, _ := NewClient("https://test.x", "SenderId1234", MockHttpClient{})
     responseString := "https://test.x/action?sender=SenderId1234&key=value"
 
-    response, err := wlClient.Request("action", map[string]string{"key": "value"})
+    response, err := wlClient.Request("action", map[string][]string{"key": []string{"value"}})
     defer response.Close()
 
     assert.Empty(t, err)
@@ -139,24 +139,49 @@ func TestGetMonitorsWithError(t *testing.T) {
     assert.EqualError(t, err, "Error")
 }
 
-// func TestGetMonitorsWithFaultType(t *testing.T) {
-//     response := `{
-//         "data":{
-//             "trafficInfo":{
-//                 "name":"Name"
-//             }
-//         },
-//         "message":{
-//             "value":"Value" 
-//         }
-//     }`
-//     wlClient, _ := NewClient(
-//         "https://test.x",
-//         "SenderId1234",
-//         MockHttpClient{Response: []byte(response), ExpectedUrl: "https://test.x/monitor?sender=SenderId1234&rbl=123&activateTrafficInfo=stoerungkurz"},
-//     )
+func TestGetMonitorsWithFaultType(t *testing.T) {
+    response := `{
+        "data":{
+            "trafficInfo":{
+                "name":"Name"
+            }
+        },
+        "message":{
+            "value":"Value" 
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{Response: []byte(response), ExpectedUrl: "https://test.x/monitor?sender=SenderId1234&rbl=123&activateTrafficInfo=stoerungkurz"},
+    )
 
-//     _, err := wlClient.GetMonitors([]string{"123"}, []string{"stoerungkurz"})
+    _, err := wlClient.GetMonitors([]string{"123"}, []string{"stoerungkurz"})
 
-//     assert.Empty(t, err)
-// }
+    assert.Empty(t, err)
+}
+
+func TestGetMonitorsWithMultipleStationNumbersAndFaultTypes(t *testing.T) {
+     response := `{
+        "data":{
+            "trafficInfo":{
+                "name":"Name"
+            }
+        },
+        "message":{
+            "value":"Value" 
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{
+            Response: []byte(response),
+            ExpectedUrl: "https://test.x/monitor?sender=SenderId1234&rbl=123&rbl=456&activateTrafficInfo=stoerungkurz&activateTrafficInfo=stoerunglang",
+        },
+    )
+
+    _, err := wlClient.GetMonitors([]string{"123","456"}, []string{"stoerungkurz","stoerunglang"})
+
+    assert.Empty(t, err)
+}
