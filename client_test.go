@@ -185,3 +185,88 @@ func TestGetMonitorsWithMultipleStationNumbersAndFaultTypes(t *testing.T) {
 
     assert.Empty(t, err)
 }
+
+func TestGetTrafficInfoListWithoutParameters(t *testing.T) {
+    response := `{
+        "data":{
+            "trafficInfos":[
+                {
+                    "name":"Name" 
+                }
+            ]
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{
+            Response: []byte(response),
+            ExpectedUrl: "https://test.x/trafficInfoList?sender=SenderId1234",
+        },
+    )
+
+    trafficInfoListResponse, err := wlClient.GetTrafficInfoList([]string{}, []string{}, []string{})
+    assert.Empty(t, err)
+    assert.Equal(t, "Name", trafficInfoListResponse.TrafficInfoListData.TrafficInfos[0].Name)
+}
+
+func TestGetTrafficInfoListWithSingleParameters(t *testing.T) {
+    response := `{
+        "data":{
+            "trafficInfos":[
+                {
+                    "name":"Name" 
+                }
+            ]
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{
+            Response: []byte(response),
+            ExpectedUrl: "https://test.x/trafficInfoList?sender=SenderId1234&relatedLine=Line1&relatedStop=Stop1&name=Name",
+        },
+    )
+
+    trafficInfoListResponse, err := wlClient.GetTrafficInfoList([]string{"Line1"}, []string{"Stop1"}, []string{"Name"})
+    assert.Empty(t, err)
+    assert.Equal(t, "Name", trafficInfoListResponse.TrafficInfoListData.TrafficInfos[0].Name)
+}
+
+func TestGetTrafficInfoListWithMultipleParameters(t *testing.T) {
+    response := `{
+        "data":{
+            "trafficInfos":[
+                {
+                    "name":"Name" 
+                }
+            ]
+        }
+    }`
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{
+            Response: []byte(response),
+            ExpectedUrl: "https://test.x/trafficInfoList?sender=SenderId1234&relatedLine=Line1&relatedLine=Line2&relatedStop=Stop1&relatedStop=Stop2&name=Name1&name=Name2",
+        },
+    )
+
+    trafficInfoListResponse, err := wlClient.GetTrafficInfoList([]string{"Line1","Line2"}, []string{"Stop1","Stop2"}, []string{"Name1","Name2"})
+    assert.Empty(t, err)
+    assert.Equal(t, "Name", trafficInfoListResponse.TrafficInfoListData.TrafficInfos[0].Name)
+}
+
+func TestGetTrafficInfoListWithError(t *testing.T) {
+    wlClient, _ := NewClient(
+        "https://test.x",
+        "SenderId1234",
+        MockHttpClient{
+            Error: errors.New("Error"),
+        },
+    )
+
+    _, err := wlClient.GetTrafficInfoList([]string{}, []string{}, []string{})
+    assert.EqualError(t, err, "Error")
+}

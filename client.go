@@ -11,6 +11,7 @@ import (
 
 const (
     ACTION_MONITOR string = "monitor"
+    ACTION_TRAFFIC_INFO_LIST string = "trafficInfoList"
 
     FAULT_TYPE_FAULT_SHORT string = "stoerungkurz"
     FAULT_TYPE_FAULT_LONG string = "stoerunglang"
@@ -57,10 +58,6 @@ func (wlClient WLClient) GetMonitors(stationNumbers []string, faultTypes []strin
     return monitorResponse, nil
 }
 
-func isEmpty(values []string) (bool) {
-    return len(values) < 1
-}
-
 func areFaultTypesValid(faultTypes []string) (bool) {
     for _, faultType := range faultTypes {
         if !(faultType == FAULT_TYPE_FAULT_SHORT || faultType == FAULT_TYPE_FAULT_LONG || faultType == FAULT_TYPE_ELEVATOR_INFO) {
@@ -68,6 +65,21 @@ func areFaultTypesValid(faultTypes []string) (bool) {
         }
     }
     return true
+}
+
+func (wlClient WLClient) GetTrafficInfoList(relatedLines []string, relatedStops []string, names []string) (wlgoResponse.TrafficInfoListResponse, error) {
+    response, err := wlClient.Request(
+        ACTION_TRAFFIC_INFO_LIST,
+        map[string][]string{"relatedLine": relatedLines, "relatedStop": relatedStops, "name": names},
+    )
+    if err != nil {
+        return wlgoResponse.TrafficInfoListResponse{}, err
+    }
+
+    var trafficInfoListResponse wlgoResponse.TrafficInfoListResponse
+    json.NewDecoder(response).Decode(&trafficInfoListResponse)
+
+    return trafficInfoListResponse, nil
 }
 
 func (wlClient WLClient) Request(action string, parameters map[string][]string) (io.ReadCloser, error) {
@@ -92,4 +104,8 @@ func (wlClient WLClient) buildURL(action string, parameters map[string][]string)
     }
 
     return url
+}
+
+func isEmpty(values []string) (bool) {
+    return len(values) < 1
 }
