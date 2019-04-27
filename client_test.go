@@ -270,3 +270,7 @@ func TestGetTrafficInfoListWithError(t *testing.T) {
     _, err := wlClient.GetTrafficInfoList([]string{}, []string{}, []string{})
     assert.EqualError(t, err, "Error")
 }
+
+func TestGetNewsListWithoutParameters(t *testing.T) {
+    //TODO
+}
