@@ -12,6 +12,7 @@ import (
 const (
     ACTION_MONITOR string = "monitor"
     ACTION_TRAFFIC_INFO_LIST string = "trafficInfoList"
+    ACTION_NEWS_LIST string = "newsList"
 
     FAULT_TYPE_FAULT_SHORT string = "stoerungkurz"
     FAULT_TYPE_FAULT_LONG string = "stoerunglang"
@@ -80,6 +81,21 @@ func (wlClient WLClient) GetTrafficInfoList(relatedLines []string, relatedStops 
     json.NewDecoder(response).Decode(&trafficInfoListResponse)
 
     return trafficInfoListResponse, nil
+}
+
+func (wlClient WLClient) GetNewsList(relatedLines []string, relatedStops []string, names []string) (wlgoResponse.NewsListResponse, error) {
+    response, err := wlClient.Request(
+        ACTION_NEWS_LIST, 
+        map[string][]string{"relatedLine": relatedLines, "relatedStop": relatedStops, "name": names},
+    )
+    if err != nil {
+        return wlgoResponse.NewsListResponse{}, err
+    }
+
+    var newsListResponse wlgoResponse.NewsListResponse
+    json.NewDecoder(response).Decode(&newsListResponse)
+
+    return newsListResponse, nil
 }
 
 func (wlClient WLClient) Request(action string, parameters map[string][]string) (io.ReadCloser, error) {
