@@ -20,6 +20,9 @@ const (
 )
 
 type Client interface {
+    GetMonitor(stationNumbers []string, faultTypes []string) (wlgoResponse.MonitorResponse, error)
+    GetTrafficInfoList(relatedLines []string, relatedStops []string, names []string) (wlgoResponse.TrafficInfoListResponse, error)
+    GetNewsList(relatedLines []string, relatedStops []string, names []string) (wlgoResponse.NewsListResponse, error)
     Request(action string, parameters map[string]string) (io.ReadCloser, error)
 }
 
