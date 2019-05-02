@@ -10,7 +10,7 @@ import (
     "net/url"
     "testing"
 
-    wlgoHttp "wlgo/http"
+    wlgoHttp "github.com/spie/wlgo/http"
 
     "github.com/stretchr/testify/assert"
 )

@@ -5,8 +5,8 @@ import (
     "errors"
     "io"
 
-    wlgoHttp "wlgo/http"
-    wlgoResponse "wlgo/response"
+    wlgoHttp "github.com/spie/wlgo/http"
+    wlgoResponse "github.com/spie/wlgo/response"
 )
 
 const (
